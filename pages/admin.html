@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Canteen Staff | Campus Bites</title>
+<style>
+body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#fffdfa;color:#202124}
+header{background:#24170f;color:#fff;padding:14px 5%;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+main{max-width:1000px;margin:auto;padding:20px 16px 50px}
+h2{margin:22px 0 10px;font-size:19px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.card{background:#fff;border:1px solid #eee7df;border-radius:14px;padding:14px}
+.card.pending{border-color:#f97316;box-shadow:0 0 0 2px #ffe3cc}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.tok{font-weight:900;font-size:22px;color:#bd4b05}
+small,p{color:#6b7280;font-size:13px;margin:4px 0}
+button{font:inherit;font-weight:700;border:0;border-radius:9px;padding:9px 13px;cursor:pointer;margin:6px 6px 0 0}
+.go{background:#f97316;color:#fff}.no{background:#fde8e8;color:#b42318}.nx{background:#fff0e3;color:#b84a08}
+select{font:inherit;padding:7px;border-radius:8px;border:1px solid #ddd}
+.empty{color:#6b7280;padding:12px 0}
+</style></head><body>
+<header><b>🍴 Campus Bites • Staff</b>
+<label>Canteen: <select id="filter"><option value="">All</option></select></label></header>
+<main>
+<h2>New orders (waiting for you)</h2><div class="grid" id="pending"></div>
+<h2>In progress</h2><div class="grid" id="active"></div>
+<h2>Finished today</h2><div class="grid" id="done"></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let orders=[],lastPending=-1;
+async function load(){
+  try{const r=await fetch('/api/admin/orders');if(!r.ok)return;orders=await r.json()}catch(e){return}
+  const names=[...new Set(orders.map(o=>o.canteen))],f=$('filter'),cur=f.value;
+  f.innerHTML='<option value="">All</option>'+names.map(n=>`<option ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
+  draw();
+}
+function card(o){
+  const items=o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ');
+  let btn='';
+  if(o.status==='Pending')btn=`<button class="go" onclick="act('${o.id}','accept')">Accept & give token</button><button class="no" onclick="act('${o.id}','reject')">Reject</button>`;
+  else if(o.status==='Preparing')btn=`<button class="nx" onclick="act('${o.id}','advance')">Mark ready</button>`;
+  else if(o.status==='Ready for Pickup')btn=`<button class="nx" onclick="act('${o.id}','advance')">Mark collected</button>`;
+  return `<div class="card ${o.status==='Pending'?'pending':''}"><div class="top"><b>${esc(o.name)}</b><span class="tok">${o.token?'#'+o.token:''}</span></div>
+  <small>${esc(o.college)} • ${esc(o.canteen)} • ${new Date(o.createdAt).toLocaleTimeString()}</small><p>${items}</p>
+  <p><b>₹${o.amount}</b> • ${o.method.toUpperCase()} • ${esc(o.status)}</p>${btn}</div>`;
+}
+function draw(){
+  const f=$('filter').value,l=orders.filter(o=>!f||o.canteen===f);
+  const put=(id,fn)=>{const a=l.filter(fn);$(id).innerHTML=a.length?a.map(card).join(''):'<div class="empty">Nothing here.</div>'};
+  put('pending',o=>o.status==='Pending');
+  put('active',o=>o.status==='Preparing'||o.status==='Ready for Pickup');
+  put('done',o=>o.status==='Completed'||o.status==='Rejected');
+  const n=l.filter(o=>o.status==='Pending').length;
+  if(lastPending>=0&&n>lastPending){try{new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=").play()}catch(e){}document.title='('+n+') New order!'}
+  else document.title=n?'('+n+') Canteen Staff':'Canteen Staff';
+  lastPending=n;
+}
+async function act(id,a){await fetch(`/api/admin/orders/${id}/${a}`,{method:'POST'});load()}
+$('filter').onchange=draw;
+load();setInterval(load,5000);
+</script></body></html>
